@@ -11,8 +11,8 @@ Vector2f32 :: l.Vector2f32
 
 MyInt::i32
 
-window_width:: cast(MyInt)1380
-window_height:: cast(MyInt)1090
+window_width:: cast(MyInt)2000
+window_height:: cast(MyInt)1200
 
 max_x:: cast(f32)window_width
 max_y:: cast(f32)window_height
@@ -32,6 +32,7 @@ Gravity::0.01
 Object :: struct{
     pos:Vector2f32,
     vel:Vector2f32,
+    force:Vector2f32,
     rad:f32
 }
 
@@ -87,8 +88,9 @@ collision :: proc(a,b : ^Object){
         a.vel += (tempb - tempa)
         b.vel += (tempa - tempb)
         //a.pos+=(a.vel*0.0000005)
-        
     }
+    //I can add a self attraction force in here
+    //for every object that undergoes the coll check, i can "pull" (physically move) the two objects closer, untill it needs to do the full collision check
 }
 
 coll_list_gen :: proc(blocks :[dynamic][Depth]MyInt, index:MyInt, new_pairs: ^[dynamic][2]MyInt){
@@ -168,27 +170,30 @@ gen_blocks::proc(blocks: ^[dynamic][Depth]MyInt){
     }
 }
 
-gen_obs::proc(Ob_list: ^[dynamic]Object, Size:f32, Dist:f32 ,center:[2]f32, Vel:[2]f32,num:MyInt, Shape1:MyInt){
-    temp_obj:Object= {{0,0},{0,0},0}
-    if(Shape1 == 0){
+gen_obs::proc(Ob_list: ^[dynamic]Object, Size:f32, Dist:f32 ,center:[2]f32, Vel:[2]f32,num:MyInt, Shape:MyInt){
+    temp_obj:Object= {{0,0},{0,0},{0,0},0}
+    if(Shape == 0){//allign to grid
         square:= cast(MyInt)m.sqrt(cast(f32) num)
         if((square*square)< num){
             square+=1
         }
         itemsx:MyInt =0
-        x:f32= center[0] - ((auto_cast square)*Dist)
-        y:f32 = center[1] - ((auto_cast square)*Dist)
+        x:f32= center[0] - ((auto_cast square)*Dist)/2
+        y:f32 = center[1] - ((auto_cast square)*Dist)/2
         for i in 0..<num{
-            temp_obj = {{x,y},Vel,Size}
+            temp_obj = {{x,y},Vel,{0,0},Size}
             append(Ob_list, temp_obj)
             itemsx +=1
             x+= Dist
             if(itemsx == square){
                 itemsx = 0
                 y += Dist
-                x = center[0] - ((auto_cast square)*Dist)
+                x = center[0] - ((auto_cast square)*Dist)/2
             }
         }
+    }
+    if(Shape==1){//allign to circ
+       // area:= (cast(f32) num)*Dist
     }
 }
 
@@ -199,8 +204,9 @@ main::proc(){
     Object_list: [dynamic]Object
     Coll_bloc:[dynamic][Depth]MyInt
     gen_blocks(&Coll_bloc)
-    gen_obs(&Object_list, 2.0, 4, {500,600}, {0.5, 0.0}, 10000, 0)
-    gen_obs(&Object_list, 2.0, 4,{1100,405}, {-0.5, 0.0}, 10000, 0)
+    gen_obs(&Object_list, 2.0, 5, {500,601}, {0.0, 0.0}, 22500, 0)
+    gen_obs(&Object_list, 2.0, 5,{1500,599}, {-0.1, 0.0}, 400, 0)
+    gen_obs(&Object_list, 2.0, 5,{1800,599}, {-0.1, 0.0}, 400, 0)
 
     length := len(Object_list)
 
@@ -216,7 +222,7 @@ main::proc(){
     colors:[7]rl.Color= {rl.SKYBLUE, rl.BLUE, rl.DARKBLUE, rl.DARKPURPLE, rl.PURPLE, rl.VIOLET, rl.RED}
 
 
-    rl.SetTargetFPS(60)
+    rl.SetTargetFPS(200)
     mag:f32
     c:rl.Color
     game_loop: for !rl.WindowShouldClose(){
