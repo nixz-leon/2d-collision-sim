@@ -12,7 +12,7 @@ Vector2f32 :: l.Vector2f32
 MyInt::i32
 
 window_width:: cast(MyInt)2000
-window_height:: cast(MyInt)1200
+window_height:: cast(MyInt)1400
 
 max_x:: cast(f32)window_width
 max_y:: cast(f32)window_height
@@ -88,9 +88,17 @@ collision :: proc(a,b : ^Object){
         a.vel += (tempb - tempa)
         b.vel += (tempa - tempb)
         //a.pos+=(a.vel*0.0000005)
-    }
+    }/*else if(temp > temp_max){
+        midpoint := (a.pos + b.pos) *0.5
+        tempa := a.pos - midpoint
+        tempb := b.pos - midpoint
+        tempa *= 0.999
+        tempb *= 0.999
+        a.pos = midpoint +tempa
+        a.pos = midpoint +tempa
+    }*/
     //I can add a self attraction force in here
-    //for every object that undergoes the coll check, i can "pull" (physically move) the two objects closer, untill it needs to do the full collision check
+    //for every object that undergoes the coll check, i can "pull" (physically move) the two objects closer, untill it needs to do the full
 }
 
 coll_list_gen :: proc(blocks :[dynamic][Depth]MyInt, index:MyInt, new_pairs: ^[dynamic][2]MyInt){
@@ -153,7 +161,6 @@ edge_coll::proc(a: ^Object){
     if(a.pos[1]+a.rad > max_y){ // bottom edge
         a.pos[1] = max_y - a.rad
         a.vel[1] *= -1
-        //a.force[1] -= Gravity
     }else if(a.pos[1]-a.rad < 0){//top edge
         a.pos[1] = a.rad
         a.vel[1] *= -1
@@ -204,10 +211,24 @@ main::proc(){
     Object_list: [dynamic]Object
     Coll_bloc:[dynamic][Depth]MyInt
     gen_blocks(&Coll_bloc)
-    gen_obs(&Object_list, 2.0, 5, {500,601}, {0.0, 0.0}, 22500, 0)
-    gen_obs(&Object_list, 2.0, 5,{1500,599}, {-0.1, 0.0}, 400, 0)
-    gen_obs(&Object_list, 2.0, 5,{1800,599}, {-0.1, 0.0}, 400, 0)
+    gen_obs(&Object_list, 2.0, 5, {500,102}, {0.0, 0.0}, 1600, 0)
+    gen_obs(&Object_list, 2.0, 5, {500,302}, {0.0, 0.0}, 1600, 0)
+    gen_obs(&Object_list, 2.0, 5, {500,502}, {0.0, 0.0}, 1600, 0)
+    gen_obs(&Object_list, 2.0, 5, {500,702}, {0.0, 0.0}, 1600, 0)
+    gen_obs(&Object_list, 2.0, 5, {500,902}, {0.0, 0.0}, 1600, 0)
+    gen_obs(&Object_list, 2.0, 5, {500,1102}, {0.0, 0.0}, 1600, 0)
+    gen_obs(&Object_list, 2.0, 5, {500,1302}, {0.0, 0.0}, 1600, 0)
 
+    gen_obs(&Object_list, 2.0, 4,{1500,701}, {-1.5, 0.0}, 1, 0)
+    gen_obs(&Object_list, 2.0, 4,{1504,701}, {-1.5, 0.0}, 4, 0)
+    gen_obs(&Object_list, 2.0, 4,{1514,701}, {-1.5, 0.0}, 9, 0)
+    gen_obs(&Object_list, 2.0, 4,{1528,701}, {-1.5, 0.0}, 16, 0)
+    gen_obs(&Object_list, 2.0, 4,{1545,701}, {-1.5, 0.0}, 25, 0)
+    gen_obs(&Object_list, 2.0, 4,{1567,701}, {-1.5, 0.0}, 36, 0)
+    gen_obs(&Object_list, 2.0, 4,{1591,701}, {-1.5, 0.0}, 36, 0)
+    gen_obs(&Object_list, 2.0, 4,{1615,701}, {-1.5, 0.0}, 36, 0)
+    //gen_obs(&Object_list, 2.0, 4,{1639,701}, {-0.9, 0.0}, 36, 0)
+    
     length := len(Object_list)
 
     tempx:i32
