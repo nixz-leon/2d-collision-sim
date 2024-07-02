@@ -11,8 +11,8 @@ Vector2f32 :: l.Vector2f32
 
 MyInt::i32
 
-window_width:: cast(MyInt)2400
-window_height:: cast(MyInt)1400
+window_width:: cast(MyInt)1380
+window_height:: cast(MyInt)1090
 
 max_x:: cast(f32)window_width
 max_y:: cast(f32)window_height
@@ -159,81 +159,90 @@ edge_coll::proc(a: ^Object){
     //return na
 }
 
-main::proc(){
-    /*
-    a,b:Object
-    a = {{1253.5665,3},{-1.22825599,-0.95115495},3}
-    b = {{1253.5664,3},{2.0940905,1.1682179},3}
-    
-    collision(&a, &b)
-    fmt.println(a)
-    fmt.println(b)
-    */
+gen_blocks::proc(blocks: ^[dynamic][Depth]MyInt){
+    resize(blocks, (auto_cast (num_buckets)))
+    for i in 0..<num_buckets{//initalizing  to -1
+        for j in 0..<Depth{
+            blocks[i][j] = -1
+        }
+    }
+}
 
-    
+gen_obs::proc(Ob_list: ^[dynamic]Object, Size:f32, Dist:f32 ,center:[2]f32, Vel:[2]f32,num:MyInt, Shape1:MyInt){
+    temp_obj:Object= {{0,0},{0,0},0}
+    if(Shape1 == 0){
+        square:= cast(MyInt)m.sqrt(cast(f32) num)
+        if((square*square)< num){
+            square+=1
+        }
+        itemsx:MyInt =0
+        x:f32= center[0] - ((auto_cast square)*Dist)
+        y:f32 = center[1] - ((auto_cast square)*Dist)
+        for i in 0..<num{
+            temp_obj = {{x,y},Vel,Size}
+            append(Ob_list, temp_obj)
+            itemsx +=1
+            x+= Dist
+            if(itemsx == square){
+                itemsx = 0
+                y += Dist
+                x = center[0] - ((auto_cast square)*Dist)
+            }
+        }
+    }
+}
+
+main::proc(){
+
     rad:f32 = 2
     tempsad :[9]MyInt = {-1,-1,-1,-1,-1,-1,-1,-1,-1}
     Object_list: [dynamic]Object
     Coll_bloc:[dynamic][Depth]MyInt
-    resize(&Coll_bloc, (auto_cast (num_buckets)))
-    fmt.println(len(Coll_bloc))
-    for i in 0..<num_buckets{//initalizing  to -1
-        for j in 0..<Depth{
-            Coll_bloc[i][j] = -1
-        }
-    }
-    //these two loops for generating the intial positions for all the objects
-    temp_obj:Object= {{0,0},{0,0},0}
-    temp_index:MyInt
-    num1:f32
-    num2:f32
-    for i in 0..<200{
-        for j in 0..<250{
-            num1 = 0.01
-            num2 = 0.0
-            //fmt.println(num1, num2)
-            temp_obj = {{(03.0+(cast(f32)j*5.5)),(3.0+(cast(f32)i*5.5))},{num1,num2},rad}
-            append(&Object_list, temp_obj)
-        }
-    }
-    
-    for i in 0..<200{
-        for j in 0..<250{
-            temp_obj = {{(12.0+(cast(f32)j*5.5)),(7.0+(cast(f32)i*5.5))},{0.325,0.25},rad}
-            append(&Object_list, temp_obj)
-        }
-    }
-    
-    
-    
-    
-    
-    
+    gen_blocks(&Coll_bloc)
+    gen_obs(&Object_list, 2.0, 4, {500,600}, {0.5, 0.0}, 10000, 0)
+    gen_obs(&Object_list, 2.0, 4,{1100,405}, {-0.5, 0.0}, 10000, 0)
 
     length := len(Object_list)
 
     tempx:i32
     tempy:i32
     tempr:f32
-    
-    rl.InitWindow((auto_cast window_width), (auto_cast window_height), "Bloop")
+        rl.InitWindow((auto_cast window_width), (auto_cast window_height), "Bloop")
     image:rl.Image = rl.LoadImage("output2.png")
-    rl.ImageColorTint(&image, rl.BLUE)
+    rl.ImageColorTint(&image, rl.WHITE)
     texture:rl.Texture2D = rl.LoadTextureFromImage(image)
     rl.UnloadImage(image)
     scale:= ((rad*2)-1)/(auto_cast Image_sideLeng)
-    
+    colors:[7]rl.Color= {rl.SKYBLUE, rl.BLUE, rl.DARKBLUE, rl.DARKPURPLE, rl.PURPLE, rl.VIOLET, rl.RED}
+
 
     rl.SetTargetFPS(60)
-    temp, temp2:Object
-    temppos: Vector2f32
-    
+    mag:f32
+    c:rl.Color
     game_loop: for !rl.WindowShouldClose(){
         rl.BeginDrawing()
         rl.ClearBackground(rl.BLACK)
         for i in 0..<length{
-            //temppos = Object_list[i].pos
-            rl.DrawTextureEx(texture, (Object_list[i].pos-Object_list[i].rad), 0.0, scale, rl.WHITE)
+            mag = l.dot(Object_list[i].vel, Object_list[i].vel)
+            if (mag >2){
+                c = colors[6]
+            }else if (mag > 1.5){
+                c = colors[5]
+            }else if (mag > 1){
+                c = colors[4]
+            }else if (mag > 0.5){
+                c = colors[3]
+            }else if (mag > 0.25){
+                c = colors[2]
+            }else if (mag > 0.125){
+                c = colors[1]
+            }else{
+                c = colors[0]
+            }
+            
+            //fmt.println(mag)
+            //fmt.println(c)
+            rl.DrawTextureEx(texture, (Object_list[i].pos-Object_list[i].rad), 0.0, scale, c)
             update(&Object_list[i],&tempsad)
             //need to find a faster insertion of indicies
             for a in 0..<9{
@@ -257,6 +266,5 @@ main::proc(){
         rl.EndDrawing()
     }
     rl.CloseWindow()
-        
 }
 
