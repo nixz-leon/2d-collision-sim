@@ -3,6 +3,7 @@ package main
 import "core:fmt"
 import m "core:math"
 import l "core:math/linalg"
+import "core:math/rand"
 import rl "vendor:raylib"
 import c "core:time"
 
@@ -10,20 +11,21 @@ Vector2f32 :: l.Vector2f32
 
 MyInt::i32
 
-window_width:: cast(MyInt)2000
-window_height:: cast(MyInt)1200
+window_width:: cast(MyInt)2400
+window_height:: cast(MyInt)1400
 
 max_x:: cast(f32)window_width
 max_y:: cast(f32)window_height
-cell_size:: cast(f32)10
+cell_size:: cast(f32)5
 
 Error :: 0.0135
-width::cast(MyInt)((window_width)/(cast(MyInt)cell_size))
-height::cast(MyInt)((window_height)/(cast(MyInt)cell_size))
+width::cast(MyInt)((window_width)/(cast(MyInt)cell_size))+1
+height::cast(MyInt)((window_height)/(cast(MyInt)cell_size))+1
 num_buckets :: cast(MyInt)(width*height)
 Image_sideLeng :: 1024
-Depth::30
+Depth::10
 
+Gravity::0.01
 
 
 
@@ -35,35 +37,37 @@ Object :: struct{
 
 //this function is fine
 //takes in Object type, and returns Object of updated position and the hash bucket it belongs in
-update :: proc (a :Object) -> (Object, MyInt){
-    index:MyInt
-    na := a
-    na.pos+=na.vel
-    //na.vel+= {0,0.00001*(max_y-na.pos[1])}
-    na = edge_coll(na)
-    x_index := m.floor_f32((na.pos[0]/cell_size))
-    y_index := m.floor_f32(na.pos[1]/cell_size)
-    index = cast(MyInt)(x_index + ((auto_cast width)*y_index))
-    if index < 0{
-        fmt.println(a.pos, " goes to ", x_index, ", ", y_index)    
-    }
-    //fmt.println(a.pos, " goes to ", x_index, ", ", y_index)
-    return na, index
+update :: proc (a :^Object, index:^[9]MyInt){
+    a.pos+=a.vel
+    edge_coll(a)
+    offset := a.rad
+    x_center := cast(MyInt)m.floor_f32((a.pos[0]/cell_size))
+    y_center := cast(MyInt)m.floor_f32(a.pos[1]/cell_size)
+    x_top := cast(MyInt)m.floor_f32((a.pos[0]-offset)/cell_size)
+    y_left := cast(MyInt)m.floor_f32((a.pos[1]-offset)/cell_size)
+    x_bot :=  cast(MyInt)m.floor_f32((a.pos[0]+offset)/cell_size)
+    y_right := cast(MyInt)m.floor_f32((a.pos[1]+offset)/cell_size)
+    //temp_width:= width
+    index[0] = (x_center + ((width)*y_center))
+    index[1] = (x_center + ((width)*y_left))
+    index[2] = (x_bot + ((width)*y_center))
+    index[3] = (x_bot + ((width)*y_left))
+    index[4] = (x_top + ((width)*y_center))
+    index[5] = (x_top + ((width)*y_left))
+    index[6] = (x_top + ((width)*y_right))
+    index[7] = (x_center + ((width)*y_right))
+    index[8] = (x_bot + ((width)*y_right))
 }
-
-
-//This code needs to be reworked where if the two objects are within Error of each other, it does different math to avoid floating point fuckery 
+//next major source for opt
 collision :: proc(a,b : ^Object){
-    //fmt.println(a.pos)
-    //fmt.println(b.pos)
     delta := (a.pos - b.pos)
-    //fmt.println(delta)
+    temp := l.dot(delta, delta)
     temp_max := (a.rad + b.rad)*(a.rad + b.rad)
-    //fmt.println(temp_max)
-    if(((delta[0]*delta[0]) + (delta[1]*delta[1])) < temp_max-Error){
+    if(temp < temp_max-Error){
         midpoint := (a.pos + b.pos) *0.5
         tempa := a.pos - midpoint
         tempb := b.pos - midpoint
+        /*
         if(tempa == {0,0}){
             tempb = l.normalize(tempb)
             tempa = -1*tempb
@@ -71,73 +75,88 @@ collision :: proc(a,b : ^Object){
             tempa = l.normalize(tempa)
             tempb = -1*tempa
         }
+        */
+        tempb = l.normalize(tempb)
+        tempa = -1*tempb
         a.pos = midpoint + (tempa * (a.rad+Error))
         b.pos = midpoint + (tempb * (b.rad+Error))
-        
+        //total_mass:= a.mass+b.mass
         delta = l.vector_normalize(delta)
-        proja := l.projection(a.vel, delta)
-        projb := l.projection(b.vel, delta)
-        a.vel = a.vel - proja + projb
-        b.vel = b.vel - projb + proja
-        a.pos+=(a.vel*0.0000005) // step slightly in velocity direction, to encourage better seperatation during the budge
-        //budge section
+        tempa = l.projection(a.vel, delta)
+        tempb = l.projection(b.vel, delta)
+        a.vel += (tempb - tempa)
+        b.vel += (tempa - tempb)
+        //a.pos+=(a.vel*0.0000005)
         
     }
 }
 
-//
-coll_list_gen :: proc(block :[dynamic][Depth]MyInt, index:MyInt, new_pairs: ^[dynamic][2]MyInt){
-    //so just generate a array of all the valid indices, can be dynamic
-    //and then do the naive pairwise matching collosion checks for that
-    check_range: [dynamic]MyInt
-    defer delete(check_range)
-    ind:MyInt
-    //the below for loop is generating excessive indices
-    for i in  0..=2{
-        for j in 0..=2{
-            bucket: for k in 0..<Depth{
-                ind =  block[index+(((auto_cast i)*width) + (auto_cast j))][k]
-                if(ind == -1){
-                    break bucket
-                }else{
-                    append_elem(&check_range, ind)
-                }
-            }
-        }
+coll_list_gen :: proc(blocks :[dynamic][Depth]MyInt, index:MyInt, new_pairs: ^[dynamic][2]MyInt){
+    if(blocks[index][1] == -1){// quick exit, seeing if there is more than one object in a block
+        return
     }
-    
-    pairs:[dynamic][2]MyInt
-    if(len(check_range) > 1){
-        temp:[2]MyInt
-        for i in 0..< (len(check_range)-2){
-            for j in (i+1)..< len(check_range)-1{
-                temp[0] = check_range[i]
-                temp[1] = check_range[j]
+    //fmt.println(blocks[index])
+    Num_in_buck:int = 2
+    for i in 1..<Depth{
+        if(blocks[index][i] == -1){
+            break
+        }
+        Num_in_buck +=1
+    }
+    temp:[2]MyInt
+    for i in 0..<(Num_in_buck-2){
+        for j in i..<(Num_in_buck-1){
+            temp[0] = blocks[index][i]
+            temp[1] = blocks[index][j]
+            if(temp[0] != temp[1]){
                 append(&new_pairs^, temp)
             }
         }
     }
+    //fmt.println(new_pairs)
+    return
+}
+coll_fun ::proc(blocks :[dynamic][Depth]MyInt, index:MyInt, Ob_list:[dynamic]Object){
+    if(blocks[index][1] == -1){// quick exit, seeing if there is more than one object in a block
+        return
+    }
+    //fmt.println(blocks[index])
+    Num_in_buck:int = 2
+    for i in 1..<Depth{
+        if(blocks[index][i] == -1){
+            break
+        }
+        Num_in_buck +=1
+    }
+    temp:[2]MyInt
+    for i in 0..<(Num_in_buck-2){
+        for j in i..<(Num_in_buck-1){
+            temp[0] = blocks[index][i]
+            temp[1] = blocks[index][j]
+            if(temp[0] != temp[1]){
+                collision(&Ob_list[temp[0]], &Ob_list[temp[1]])
+            }
+        }
+    }
 }
 
-edge_coll::proc(a: Object) -> (Object){
-    na := a
-    if(na.pos[0]+na.rad > max_x){
-        na.pos[0] = max_x - na.rad
-        na.vel[0] *= -1
+edge_coll::proc(a: ^Object){
+    if(a.pos[0]+a.rad > max_x){ //right edge
+        a.pos[0] = max_x - a.rad
+        a.vel[0] *= -1
+    } else if(a.pos[0]-a.rad <0){ //left edge
+        a.pos[0] = a.rad
+        a.vel[0] *= -1
     }
-    if(na.pos[1]+na.rad > max_y){
-        na.pos[1] = max_y - na.rad
-        na.vel[1] *= -1
+    if(a.pos[1]+a.rad > max_y){ // bottom edge
+        a.pos[1] = max_y - a.rad
+        a.vel[1] *= -1
+        //a.force[1] -= Gravity
+    }else if(a.pos[1]-a.rad < 0){//top edge
+        a.pos[1] = a.rad
+        a.vel[1] *= -1
     }
-    if(na.pos[0]-na.rad <0){
-        na.pos[0] = na.rad
-        na.vel[0] *= -1
-    }
-    if(na.pos[1]-na.rad < 0){
-        na.pos[1] = na.rad
-        na.vel[1] *= -1
-    }
-    return na
+    //return na
 }
 
 main::proc(){
@@ -152,7 +171,8 @@ main::proc(){
     */
 
     
-    rad:f32 = 3
+    rad:f32 = 2
+    tempsad :[9]MyInt = {-1,-1,-1,-1,-1,-1,-1,-1,-1}
     Object_list: [dynamic]Object
     Coll_bloc:[dynamic][Depth]MyInt
     resize(&Coll_bloc, (auto_cast (num_buckets)))
@@ -165,20 +185,29 @@ main::proc(){
     //these two loops for generating the intial positions for all the objects
     temp_obj:Object= {{0,0},{0,0},0}
     temp_index:MyInt
-    for i in 0..<150{
-        for j in 0..<300{
-            temp_obj = {{(10.0+(cast(f32)j*6)),(3.0+(cast(f32)i*6))},{1.5,0},rad}
+    num1:f32
+    num2:f32
+    for i in 0..<200{
+        for j in 0..<250{
+            num1 = 0.01
+            num2 = 0.0
+            //fmt.println(num1, num2)
+            temp_obj = {{(03.0+(cast(f32)j*5.5)),(3.0+(cast(f32)i*5.5))},{num1,num2},rad}
             append(&Object_list, temp_obj)
         }
     }
-    /*
-    for i in 0..<150{
-        for j in 0..<300{
-            temp_obj = {{(20.0+(cast(f32)j*7)),(100.0+(cast(f32)i*7))},{-1.5,1.0},rad}
+    
+    for i in 0..<200{
+        for j in 0..<250{
+            temp_obj = {{(12.0+(cast(f32)j*5.5)),(7.0+(cast(f32)i*5.5))},{0.325,0.25},rad}
             append(&Object_list, temp_obj)
         }
     }
-    */
+    
+    
+    
+    
+    
     
 
     length := len(Object_list)
@@ -188,7 +217,8 @@ main::proc(){
     tempr:f32
     
     rl.InitWindow((auto_cast window_width), (auto_cast window_height), "Bloop")
-    image:rl.Image = rl.LoadImage("output.png")
+    image:rl.Image = rl.LoadImage("output2.png")
+    rl.ImageColorTint(&image, rl.BLUE)
     texture:rl.Texture2D = rl.LoadTextureFromImage(image)
     rl.UnloadImage(image)
     scale:= ((rad*2)-1)/(auto_cast Image_sideLeng)
@@ -199,83 +229,33 @@ main::proc(){
     temppos: Vector2f32
     
     game_loop: for !rl.WindowShouldClose(){
-        pairs:[dynamic][2]MyInt
-        
         rl.BeginDrawing()
-        rl.ClearBackground(rl.WHITE)
+        rl.ClearBackground(rl.BLACK)
         for i in 0..<length{
-            temppos = Object_list[i].pos
-            rl.DrawTextureEx(texture, temppos, 0.0, scale, rl.WHITE)
-            temp, temp_index = update(Object_list[i])
-            if(temp.pos[0] <0 || Object_list[i].pos[0] < 0){
-                fmt.println(temp, "from",  Object_list[i])
-            }
-            col1: for t in 0..<Depth{
-                if(temp_index < 0){
-                    fmt.println(Object_list[i].pos, " ", width)
-                }
-                if(Coll_bloc[temp_index][t] == -1){
-                    Coll_bloc[temp_index][t] = auto_cast i
-                    break col1
-                }
-            }
-            Object_list[i] = temp
-        }
-
-        
-        //need to edit this code to deal with width%2 !=0 case, and probably clean up the logic significantly 
-        for i in 0..= (height-2)/2 -1 {
-            for j in 0..= (width-2)/2 -1{
-                temp_pairs:[dynamic][2]MyInt
-                coll_list_gen(Coll_bloc, ((i*width*2) + j*2),&temp_pairs)
-                if len(temp_pairs) != 0{
-                    append(&pairs, ..temp_pairs[:])
-                }
-                delete(temp_pairs)
-            }   
-        }
-
-    
-    
-    
-        for passes in 0..<1{
-            if len(pairs) != 0{
-                for i in 0..<len(pairs){
-                    temp = Object_list[pairs[i][0]]
-                    temp2 = Object_list[pairs[i][1]]
-                    temp = edge_coll(temp)
-                    temp2 = edge_coll(temp2)
-                    collision(&temp,&temp2)
-                    if(cast(int)temp.pos[0] <0  || cast(int)temp2.pos[0] <0){
-                        fmt.println(Object_list[pairs[i][0]], "and ", Object_list[pairs[i][1]], " goes to ", temp, "and ", temp2)
-                        break game_loop
+            //temppos = Object_list[i].pos
+            rl.DrawTextureEx(texture, (Object_list[i].pos-Object_list[i].rad), 0.0, scale, rl.WHITE)
+            update(&Object_list[i],&tempsad)
+            //need to find a faster insertion of indicies
+            for a in 0..<9{
+                col1: for t in 0..<Depth{
+                    if(Coll_bloc[tempsad[a]][t] == auto_cast i){
+                        break col1
+                    }else if(Coll_bloc[tempsad[a]][t] == -1){
+                        Coll_bloc[tempsad[a]][t] = auto_cast i
+                        break col1
                     }
-                    temp = edge_coll(temp)
-                    temp2 = edge_coll(temp2)
-                    Object_list[pairs[i][0]] = temp
-                    Object_list[pairs[i][1]] = temp2
-                
                 }
             }
         }
-        
-        
-        
-    
         for i in 0..<num_buckets{   
+            coll_fun(Coll_bloc, i, Object_list)
             for j in 0..<Depth{
                 Coll_bloc[i][j] = -1
             }
         }
-        
-        fmt.println(rl.GetFrameTime())
+        fmt.println(rl.GetFPS())
         rl.EndDrawing()
-        delete(pairs)
     }
-    
-    
-    
-    
     rl.CloseWindow()
         
 }
